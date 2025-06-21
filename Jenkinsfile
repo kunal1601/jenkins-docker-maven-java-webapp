@@ -1,94 +1,72 @@
 pipeline {
-    
+
     agent {
-        label "linuxbuildnode"
-    }
-    
-    
+        label "agent1"
+    } 
+    environment {
+        JAVA_HOME = "/usr/lib/jvm/java-21-amazon-corretto.x86_64"
+        PATH = "${JAVA_HOME}/bin:${env.PATH}"
+       }
     stages {
         stage('SCM') {
             steps {
-                git 'https://github.com/vimallinuxworld13/jenkins-docker-maven-java-webapp.git'
-                
+                git 'https://github.com/kunal1601/jenkins-docker-maven-java-webapp.git'
             }
-            
         }
-        
-        stage('Build by Maven Package') {
+        stage('build stage-by Maven'){
             steps {
+                echo "this is mvn stage..."
                 sh 'mvn clean package'
             }
-            
         }
-        
-        
-        stage('Build Docker OWN image') {
+         stage('build Docker image'){
             steps {
-                sh "sudo docker build -t  vimal13/javaweb:${BUILD_TAG}  ."
-                //sh 'whoami'
+                echo "building docker image"
+                sh 'sudo docker build -t kunal0816/java-maven-web-app:v${BUILD_NUMBER} .'
             }
-            
         }
-        
-        
-        stage('Push Image to Docker HUB') {
+        stage('Push docker image'){
             steps {
-                
-                withCredentials([string(credentialsId: 'DOCKER_HUB_PWD', variable: 'DOCKER_HUB_PASS_CODE')]) {
-    // some block
-                 sh "sudo docker login -u vimal13 -p $DOCKER_HUB_PASS_CODE"
-}
-               
-               sh "sudo docker push vimal13/javaweb:${BUILD_TAG}"
+                echo "Push docker image"
+               withCredentials([string(credentialsId: 'Docker_hub_pass', variable: 'git_pass')]) {
+               sh 'sudo docker login -u kunal0816 -p $git_pass'
+}                
+                sh 'sudo docker push kunal0816/java-maven-web-app:v${BUILD_NUMBER}'
             }
-            
         }
-        
-        
-        stage('Deploy webAPP in DEV Env') {
+        stage('Deploying the image'){
             steps {
-                sh 'sudo docker rm -f myjavaapp'
-                sh "sudo docker run  -d  -p  8080:8080 --name myjavaapp   vimal13/javaweb:${BUILD_TAG}"
-                //sh 'whoami'
+                echo "Deployig web_app on tomcat server"
+                sh 'sudo docker rm -f web_app'
+                sh 'sudo docker run -d -p 8080:8080 --name web_app kunal0816/java-maven-web-app:v${BUILD_NUMBER}'
             }
-            
+        }    
+       stage('QA Team') {
+         steps {
+             sshagent(['QA_env_id']) {
+              sh """
+                ssh -o StrictHostKeyChecking=no ec2-user@13.233.63.52 '
+                sudo yum install docker -y
+                sudo systemctl start docker
+                sudo systemctl enable docker
+                sudo docker rm -f web_app || true
+                sudo docker run -d -p 8080:8080 --name web_app kunal0816/java-maven-web-app:v${BUILD_NUMBER}
+            '
+            """ 
+          }
         }
-        
-        
-        stage('Deploy webAPP in QA/Test Env') {
+    }  
+        stage('QAT Test') {
             steps {
-               
-               sshagent(['QA_ENV_SSH_CRED']) {
-    
-                    sh "ssh  -o  StrictHostKeyChecking=no ec2-user@13.233.100.238 sudo docker rm -f myjavaapp"
-                    sh "ssh ec2-user@13.233.100.238 sudo docker run  -d  -p  8080:8080 --name myjavaapp   vimal13/javaweb:${BUILD_TAG}"
-                }
 
-            }
-            
-        }
-        
-        
-         stage('QAT Test') {
-            steps {
-                
-               // sh 'curl --silent http://13.233.100.238:8080/java-web-app/ |  grep India'
-                
-                retry(10) {
-                    sh 'curl --silent http://13.233.100.238:8080/java-web-app/ |  grep India'
+                    retry(10) {
+                    sh 'curl --silent http://13.233.63.52:8080/ |  grep India'
                 }
-            
-               
             }
-        }
-          
+        }    
         
-         
-         
-        stage('approved') {
+          stage('approved') {
             steps {
-                
-            
             script {
                 Boolean userInput = input(id: 'Proceed1', message: 'Promote build?', parameters: [[$class: 'BooleanParameterDefinition', defaultValue: true, description: '', name: 'Please confirm you agree with this']])
                 echo 'userInput: ' + userInput
@@ -99,54 +77,26 @@ pipeline {
                     // not do action
                     echo "Action was aborted."
                 }
-            
-                
             }
         }
         }
-        
-        
-         
-        
-        stage('Deploy webAPP in Prod Env') {
-            steps {
-               
-               sshagent(['QA_ENV_SSH_CRED']) {
-    
-                    
-                    sh "ssh  -o  StrictHostKeyChecking=no ec2-user@13.232.250.244 sudo kubectl  delete    deployment myjavawebapp"
-                    sh "ssh  ec2-user@13.232.250.244 sudo kubectl  create    deployment myjavawebapp  --image=vimal13/javaweb:${BUILD_TAG}"
-                    sh "ssh ec2-user@13.232.250.244 sudo wget https://raw.githubusercontent.com/vimallinuxworld13/jenkins-docker-maven-java-webapp/master/webappsvc.yml"
-                    sh "ssh ec2-user@13.232.250.244 sudo kubectl  apply -f webappsvc.yml"
-                    sh "ssh ec2-user@13.232.250.244 sudo kubectl  scale deployment myjavawebapp --replicas=5"
-                }
 
-            }
-            
-        } 
-        
-    
-        
-    }
-    
-  
-        
-     post {
-         always {
-             echo "You can always see me"
-         }
-         success {
-              echo "I am running because the job ran successfully"
-         }
-         unstable {
-              echo "Gear up ! The build is unstable. Try fix it"
-         }
-         failure {
-             echo "OMG ! The build failed"
-             mail bcc: '', body: 'hi check this ..', cc: '', from: '', replyTo: '', subject: 'job ete fail', to: 'vdaga@lwindia.com'
-         }
-     }
+      stage('Production environment') {
+         steps {
+             sshagent(['QA_env_id']) {
+              sh """
+                ssh -o StrictHostKeyChecking=no ec2-user@13.235.69.215 '
+                sudo yum install docker -y
+                sudo systemctl start docker
+                sudo systemctl enable docker
+                sudo docker rm -f web_app || true
+                sudo docker run -d -p 8080:8080 --name web_app kunal0816/java-maven-web-app:v${BUILD_NUMBER}
+            '
+            """ 
+          }
+        }
+    }  
 
-    
-    
+   }
 }
+
