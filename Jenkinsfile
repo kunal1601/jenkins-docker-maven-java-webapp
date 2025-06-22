@@ -60,7 +60,7 @@ pipeline {
             steps {
 
                     retry(10) {
-                    sh 'curl --silent http://65.2.83.119:8080/ |  grep India'
+                    sh 'curl --silent http://65.2.83.119:8080/ |  grep -i kunal'
                 }
             }
         }    
