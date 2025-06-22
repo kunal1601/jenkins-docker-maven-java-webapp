@@ -45,7 +45,7 @@ pipeline {
          steps {
              sshagent(['QA_env_id']) {
               sh """
-                ssh -o StrictHostKeyChecking=no ec2-user@13.233.63.52 '
+                ssh -o StrictHostKeyChecking=no ec2-user@65.2.83.119 '
                 sudo yum install docker -y
                 sudo systemctl start docker
                 sudo systemctl enable docker
@@ -60,7 +60,7 @@ pipeline {
             steps {
 
                     retry(10) {
-                    sh 'curl --silent http://13.233.63.52:8080/ |  grep India'
+                    sh 'curl --silent http://65.2.83.119:8080/ |  grep India'
                 }
             }
         }    
@@ -85,7 +85,7 @@ pipeline {
          steps {
              sshagent(['QA_env_id']) {
               sh """
-                ssh -o StrictHostKeyChecking=no ec2-user@13.235.69.215 '
+                ssh -o StrictHostKeyChecking=no ec2-user@13.203.101.95 '
                 sudo yum install docker -y
                 sudo systemctl start docker
                 sudo systemctl enable docker
@@ -99,4 +99,3 @@ pipeline {
 
    }
 }
-
